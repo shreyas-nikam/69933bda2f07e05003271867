@@ -16,7 +16,7 @@ from source import *  # noqa: F401,F403
 # App Config
 # ============================================================
 st.set_page_config(
-    page_title="Portfolio-Level Data Extraction with RAG (QuantUniversity)",
+    page_title="QuLab: Lab 30 - Portfolio-Level Data Extraction with RAG (QuantUniversity)",
     layout="wide",
 )
 
@@ -74,6 +74,9 @@ if "val_df" not in st.session_state:
 
 if "overall_accuracy" not in st.session_state:
     st.session_state.overall_accuracy = 0.0
+
+if "openai_api_key" not in st.session_state:
+    st.session_state.openai_api_key = ""
 
 
 # ============================================================
@@ -143,7 +146,7 @@ def _safe_float(x):
 # ============================================================
 # Main Layout
 # ============================================================
-st.title("Portfolio-Level Data Extraction with RAG")
+st.title("QuLab: Lab 30 - Portfolio-Level Data Extraction with RAG")
 st.caption(
     "A QuantUniversity blueprint for extracting structured, comparable metrics across a portfolio using Retrieval-Augmented Generation (RAG)."
 )
@@ -429,20 +432,24 @@ Those retrieved excerpts become the context that the LLM must translate into a s
     else:
         st.subheader("OpenAI Configuration")
         st.caption(
-            "Provide your API key (not stored). If blank, the app will use OPENAI_API_KEY from environment.")
-        openai_api_key = st.text_input(
-            "OpenAI API key", type="password", value="")
+            "Provide your API key. It is stored only for this session and discarded when the session ends.")
+        api_key_input = st.text_input(
+            "OpenAI API key", type="password", value=st.session_state.openai_api_key)
+        if api_key_input.strip():
+            st.session_state.openai_api_key = api_key_input.strip()
         llm_model = st.selectbox("Model", options=[
                                  "gpt-4o", "gpt-4.1-mini", "gpt-4o-mini", "gpt-3.5-turbo"], index=0)
 
         if st.button("Start Batch Extraction"):
             with st.spinner("Extracting across all portfolio companies..."):
                 try:
-                    # Build client (do not store key in session_state)
-                    if openai_api_key.strip():
-                        os.environ["OPENAI_API_KEY"] = openai_api_key.strip()
+                    if not st.session_state.openai_api_key:
+                        st.error(
+                            "Please provide an OpenAI API key before running extraction.")
+                        st.stop()
 
-                    client_llm = OpenAI()
+                    client_llm = OpenAI(
+                        api_key=st.session_state.openai_api_key)
 
                     extracted_df, total_tokens, total_cost, elapsed_time = run_batch_extraction(
                         PORTFOLIO,
