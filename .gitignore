@@ -3,7 +3,5 @@
 *.pyc
 __pycache__/
 
-# Streamlit
-.streamlit/
 
 venv/

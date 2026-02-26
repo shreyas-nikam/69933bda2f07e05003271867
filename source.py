@@ -1,4 +1,4 @@
-import fitz # PyMuPDF for PDF parsing
+import fitz  # PyMuPDF for PDF parsing
 import chromadb
 from sentence_transformers import SentenceTransformer
 # Assuming 'langchain-classic' is specifically used as per the original notebook.
@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 import seaborn as sns
 from openai import OpenAI
-import requests # For downloading files programmatically
+import requests  # For downloading files programmatically
 
 # --- Global Configurations and Constants ---
 # It's good practice to load API keys securely from environment variables.
@@ -55,17 +55,21 @@ DOCUMENT EXCERPTS:
 {context}"""
 
 # Helper to parse required fields from the prompt for N/A returns
+
+
 def _get_required_fields_from_prompt(prompt: str) -> list[str]:
-    match = re.search(r'Required fields:\n(\s*\{\{.*?\}\}\s*)', prompt, re.DOTALL)
+    match = re.search(
+        r'Required fields:\n(\s*\{\{.*?\}\}\s*)', prompt, re.DOTALL)
     if match:
         json_str = match.group(1).replace('{{', '{').replace('}}', '}')
         try:
             return list(json.loads(json_str).keys())
         except json.JSONDecodeError:
             pass
-    return [] # Fallback
+    return []  # Fallback
 
 # --- Helper Functions for Data Parsing ---
+
 
 def parse_dollars(val: str) -> float | None:
     """
@@ -76,13 +80,14 @@ def parse_dollars(val: str) -> float | None:
         return None
 
     val = val.strip()
-    match = re.search(r'[\$€£]?([\d,.]+)\s*(million|billion|M|B)?', val, re.IGNORECASE)
+    match = re.search(
+        r'[\$€£]?([\d,.]+)\s*(million|billion|M|B)?', val, re.IGNORECASE)
     if match:
         num_str = match.group(1).replace(',', '')
         try:
             num = float(num_str)
         except ValueError:
-            return None # Handle cases like '1.2.3' which are not valid numbers
+            return None  # Handle cases like '1.2.3' which are not valid numbers
         unit = match.group(2)
         if unit:
             unit = unit.lower()
@@ -90,8 +95,9 @@ def parse_dollars(val: str) -> float | None:
                 return num * 1e6
             elif unit in ['billion', 'b']:
                 return num * 1e9
-        return num # Return as is if no unit or unit not matched
-    return None # Return None if no match found after trying to parse
+        return num  # Return as is if no unit or unit not matched
+    return None  # Return None if no match found after trying to parse
+
 
 def parse_eps(val: str) -> float | None:
     """
@@ -114,6 +120,7 @@ def parse_eps(val: str) -> float | None:
 
 # --- Data Handling Functions ---
 
+
 def download_proxy_filings(doc_dir: str, portfolio_map: dict):
     """
     Downloads PDF files from specified URLs into the doc_dir.
@@ -129,7 +136,7 @@ def download_proxy_filings(doc_dir: str, portfolio_map: dict):
 
     print(f"\nDownloading files to {doc_dir}...")
     for ticker, filename in files_to_download_map.items():
-        if ticker in portfolio_map: # Only download if in current portfolio
+        if ticker in portfolio_map:  # Only download if in current portfolio
             file_url = f"{base_url}{filename}"
             filepath = os.path.join(doc_dir, filename)
             if os.path.exists(filepath):
@@ -138,13 +145,14 @@ def download_proxy_filings(doc_dir: str, portfolio_map: dict):
             try:
                 print(f"  Downloading {filename} from {file_url}...")
                 response = requests.get(file_url, stream=True, timeout=30)
-                response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+                response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
                 with open(filepath, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                 print(f"  Downloaded {filename}")
             except requests.exceptions.RequestException as e:
                 print(f"  Error downloading {filename} from {file_url}: {e}")
+
 
 def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int = 500, chunk_overlap: int = 100):
     """
@@ -158,7 +166,7 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ". ",] # More robust separators
+        separators=["\n\n", "\n", ". ",]  # More robust separators
     )
 
     client = chromadb.Client()
@@ -167,17 +175,18 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
     try:
         client.delete_collection(name="portfolio_proxies")
         print("Deleted existing collection 'portfolio_proxies'.")
-    except Exception: # ChromaDB raises generic exception if collection doesn't exist
+    except Exception:  # ChromaDB raises generic exception if collection doesn't exist
         print("No existing collection 'portfolio_proxies' to delete or error deleting. Proceeding to create.")
 
     collection = client.create_collection(
         name="portfolio_proxies",
-        metadata={"hnsw:space": "cosine"} # Using cosine similarity for SentenceTransformer embeddings
+        # Using cosine similarity for SentenceTransformer embeddings
+        metadata={"hnsw:space": "cosine"}
     )
     print("Created new collection 'portfolio_proxies'.")
 
     all_chunks = []
-    os.makedirs(doc_dir, exist_ok=True) # Ensure the directory exists
+    os.makedirs(doc_dir, exist_ok=True)  # Ensure the directory exists
 
     print(f"\nIngesting earnings statements from '{doc_dir}'...")
     for ticker, name in portfolio_map.items():
@@ -185,7 +194,8 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
         filepath = os.path.join(doc_dir, f'{ticker}_Q4_2025_Earnings.pdf')
 
         if not os.path.exists(filepath):
-            print(f"WARNING: File not found for {ticker} at {filepath}. Skipping.")
+            print(
+                f"WARNING: File not found for {ticker} at {filepath}. Skipping.")
             continue
 
         print(f"Processing {ticker} ({name})...")
@@ -237,8 +247,10 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
         ids=[c['id'] for c in all_chunks]
     )
 
-    print(f"\nTotal: {collection.count()} chunks across {len(portfolio_map)} companies")
+    print(
+        f"\nTotal: {collection.count()} chunks across {len(portfolio_map)} companies")
     return collection, embedder
+
 
 def retrieve_for_company(query: str, collection: chromadb.Collection, embedder: SentenceTransformer, ticker: str, k: int = 8):
     """Retrieve relevant chunks ONLY from a specific company's documents."""
@@ -261,6 +273,7 @@ def retrieve_for_company(query: str, collection: chromadb.Collection, embedder: 
             })
     return chunks
 
+
 def extract_governance_data(ticker: str, company_name: str, collection: chromadb.Collection, embedder: SentenceTransformer, llm_client: OpenAI, model: str = 'gpt-4o'):
     """Extract structured financial data for one company via RAG."""
 
@@ -277,7 +290,8 @@ def extract_governance_data(ticker: str, company_name: str, collection: chromadb
     seen_texts_hashes = set()
 
     for query in queries:
-        chunks = retrieve_for_company(query, collection, embedder, ticker=ticker, k=5)
+        chunks = retrieve_for_company(
+            query, collection, embedder, ticker=ticker, k=5)
         for c in chunks:
             # Deduplicate chunks based on text content hash
             chunk_text_hash = hash(c['text'].strip())
@@ -300,7 +314,8 @@ def extract_governance_data(ticker: str, company_name: str, collection: chromadb
             model=model,
             messages=[
                 {"role": "system", "content": "You are a financial analysis assistant. Extract financial data precisely. Return only valid JSON."},
-                {"role": "user", "content": EXTRACTION_PROMPT.format(context=context)}
+                {"role": "user", "content": EXTRACTION_PROMPT.format(
+                    context=context)}
             ],
             temperature=0.0,
             response_format={"type": "json_object"},
@@ -308,21 +323,24 @@ def extract_governance_data(ticker: str, company_name: str, collection: chromadb
         )
 
         data = json.loads(response.choices[0].message.content)
-        data['ticker'] = ticker # Ensure ticker is set explicitly
+        data['ticker'] = ticker  # Ensure ticker is set explicitly
         data['company'] = company_name
 
         tokens_used = response.usage.prompt_tokens + response.usage.completion_tokens
         # Current GPT-4o pricing (illustrative, update to actual rates if necessary):
         # Input: $5.00 / 1M tokens, Output: $15.00 / 1M tokens
-        cost = (response.usage.prompt_tokens * 5.00 + response.usage.completion_tokens * 15.00) / 1_000_000
+        cost = (response.usage.prompt_tokens * 5.00 +
+                response.usage.completion_tokens * 15.00) / 1_000_000
 
         return data, tokens_used, cost
     except json.JSONDecodeError as e:
-        print(f"JSON Decode Error for {ticker}: {e}. Raw response: {response.choices[0].message.content}")
+        print(
+            f"JSON Decode Error for {ticker}: {e}. Raw response: {response.choices[0].message.content}")
         return {field: "N/A" for field in required_fields}, 0, 0
     except Exception as e:
         print(f"An unexpected error occurred for {ticker}: {e}")
         return {field: "N/A" for field in required_fields}, 0, 0
+
 
 def run_batch_extraction(portfolio_map: dict, collection: chromadb.Collection, embedder: SentenceTransformer, llm_client: OpenAI, model: str = 'gpt-4o'):
     """Orchestrates extraction for all companies in the portfolio."""
@@ -347,13 +365,15 @@ def run_batch_extraction(portfolio_map: dict, collection: chromadb.Collection, e
 
     print(f"\nBatch extraction complete:")
     print(f"Companies: {len(results)}")
-    print(f"Total time: {elapsed_time:.1f}s ({elapsed_time/max(1, len(results)):.1f}s per company)")
+    print(
+        f"Total time: {elapsed_time:.1f}s ({elapsed_time/max(1, len(results)):.1f}s per company)")
     print(f"Total tokens: {total_tokens:,}")
     print(f"Total cost: ${total_cost:.4f}")
 
     return extracted_df, total_tokens, total_cost, elapsed_time
 
 # --- Validation Functions ---
+
 
 def get_ground_truth_data() -> pd.DataFrame:
     """
@@ -366,9 +386,9 @@ def get_ground_truth_data() -> pd.DataFrame:
         {
             'ticker': 'AAPL',
             'company': 'Apple Inc.',
-            'total_revenue': '$102,466 million',
-            'net_income': '$27,466 million',
-            'diluted_eps': '$1.85',
+            'total_revenue': '$416,161 million',
+            'net_income': '$112,010 million',
+            'diluted_eps': '$7.46',
             'cash_and_equivalents': '$35,934 million'
         },
 
@@ -379,7 +399,7 @@ def get_ground_truth_data() -> pd.DataFrame:
             'total_revenue': '$113,828 million',
             'net_income': '$34,455 million',
             'diluted_eps': '$2.82',
-            'cash_and_equivalents': 'N/A'
+            'cash_and_equivalents': '$30,708 million'
         },
 
         # Unilever (IR Q4 2025 - adjusted from UL for consistency with downloaded files)
@@ -387,20 +407,21 @@ def get_ground_truth_data() -> pd.DataFrame:
             'ticker': 'IR',
             'company': 'Unilever Inc.',
             'total_revenue': '€50.5 billion',
-            'net_income': 'N/A',
-            'diluted_eps': 'N/A',
+            'net_income': '€9,469 million',
+            'diluted_eps': '€4.32',
             'cash_and_equivalents': 'N/A'
         },
         # Tesla (TSLA Q4 2025) - No ground truth provided in original notebook, adding placeholder
         {
             'ticker': 'TSLA',
             'company': 'Tesla Inc.',
-            'total_revenue': 'N/A',
-            'net_income': 'N/A',
-            'diluted_eps': 'N/A',
+            'total_revenue': '24,901 (million USD)',
+            'net_income': '840 (million USD)',
+            'diluted_eps': '0.24 USD',
             'cash_and_equivalents': 'N/A'
         }
     ])
+
 
 def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fields_to_check: list[str]) -> tuple[pd.DataFrame, float]:
     """
@@ -420,7 +441,7 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
             })
             continue
 
-        ext_row = ext_row_candidates.iloc[0] # Take the first matched row
+        ext_row = ext_row_candidates.iloc[0]  # Take the first matched row
 
         for field in fields_to_check:
             truth_val = str(truth_row.get(field, 'N/A')).strip()
@@ -439,7 +460,7 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
 
             # Case 1: Both are N/A (or None equivalents)
             if ((truth_val.lower() == 'n/a' or parsed_truth is None) and
-                (ext_val.lower() == 'n/a' or parsed_ext is None)):
+                    (ext_val.lower() == 'n/a' or parsed_ext is None)):
                 status = 'BOTH_NA'
             # Case 2: Exact string match (for non-numerical fields or exact numerical string)
             elif truth_val.lower() == ext_val.lower():
@@ -451,10 +472,11 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
                     status = 'PARTIAL_MATCH_NUMERIC'
             # Case 4: Partial string match (for qualitative fields or if numbers are embedded in text)
             # This logic needs to be careful not to override a numeric mismatch if the field is expected to be numeric
-            elif field not in ['total_revenue', 'net_income', 'diluted_eps', 'cash_and_equivalents']: # Only for qualitative fields
+            # Only for qualitative fields
+            elif field not in ['total_revenue', 'net_income', 'diluted_eps', 'cash_and_equivalents']:
                 if truth_val.lower() != 'n/a' and ext_val.lower() != 'n/a' and \
                    (truth_val.lower() in ext_val.lower() or ext_val.lower() in truth_val.lower()):
-                  status = 'PARTIAL_MATCH_TEXT'
+                    status = 'PARTIAL_MATCH_TEXT'
 
             validation_results.append({
                 'ticker': ticker, 'field': field,
@@ -466,9 +488,10 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
 
     # Summary calculations
     n_total_verifiable = len(val_df[val_df['status'] != 'BOTH_NA'])
-    n_correct = len(val_df[val_df['status'].isin(['EXACT_MATCH', 'PARTIAL_MATCH_NUMERIC', 'PARTIAL_MATCH_TEXT'])])
+    n_correct = len(val_df[val_df['status'].isin(
+        ['EXACT_MATCH', 'PARTIAL_MATCH_NUMERIC', 'PARTIAL_MATCH_TEXT'])])
 
-    accuracy = n_correct / max(1, n_total_verifiable) # Avoid division by zero
+    accuracy = n_correct / max(1, n_total_verifiable)  # Avoid division by zero
 
     print("\nVALIDATION RESULTS")
     print("=" * 55)
@@ -480,7 +503,8 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
     if not mismatches.empty:
         print(f"\nMISMATCHES ({len(mismatches)}):")
         for idx, row in mismatches.iterrows():
-            print(f" {row['ticker']}.{row['field']}: truth='{row['truth']}' vs extracted='{row['extracted']}' (Status: {row['status']})")
+            print(
+                f" {row['ticker']}.{row['field']}: truth='{row['truth']}' vs extracted='{row['extracted']}' (Status: {row['status']})")
     else:
         print("\nNo mismatches found!")
 
@@ -501,6 +525,7 @@ def validate_extraction(extracted_df: pd.DataFrame, truth_df: pd.DataFrame, fiel
 
 # --- Reporting and Visualization Functions ---
 
+
 def display_financial_comparison(governance_df: pd.DataFrame, excel_path: str = 'financial_comparison.xlsx') -> pd.DataFrame:
     """
     Generates and displays a financial comparison table and exports it to Excel.
@@ -512,12 +537,17 @@ def display_financial_comparison(governance_df: pd.DataFrame, excel_path: str = 
         'segment_revenue_detail', 'guidance_or_outlook', 'key_risks_forward_looking'
     ]
 
-    display_df = governance_df[[c for c in display_cols if c in governance_df.columns]].copy()
+    display_df = governance_df[[
+        c for c in display_cols if c in governance_df.columns]].copy()
 
-    display_df['total_revenue_numeric'] = display_df.get('total_revenue', pd.Series(dtype='float64')).apply(parse_dollars)
-    display_df['net_income_numeric'] = display_df.get('net_income', pd.Series(dtype='float64')).apply(parse_dollars)
-    display_df['cash_and_equivalents_numeric'] = display_df.get('cash_and_equivalents', pd.Series(dtype='float64')).apply(parse_dollars)
-    display_df['diluted_eps_numeric'] = display_df.get('diluted_eps', pd.Series(dtype='float64')).apply(parse_eps)
+    display_df['total_revenue_numeric'] = display_df.get(
+        'total_revenue', pd.Series(dtype='float64')).apply(parse_dollars)
+    display_df['net_income_numeric'] = display_df.get(
+        'net_income', pd.Series(dtype='float64')).apply(parse_dollars)
+    display_df['cash_and_equivalents_numeric'] = display_df.get(
+        'cash_and_equivalents', pd.Series(dtype='float64')).apply(parse_dollars)
+    display_df['diluted_eps_numeric'] = display_df.get(
+        'diluted_eps', pd.Series(dtype='float64')).apply(parse_eps)
 
     print("\nPORTFOLIO FINANCIAL COMPARISON TABLE")
     print("=" * 110)
@@ -525,11 +555,13 @@ def display_financial_comparison(governance_df: pd.DataFrame, excel_path: str = 
         'total_revenue_numeric', 'net_income_numeric',
         'cash_and_equivalents_numeric', 'diluted_eps_numeric'
     ]
-    print(display_df.drop(columns=[c for c in drop_cols_for_display if c in display_df.columns]).to_string(index=False))
+    print(display_df.drop(columns=[
+          c for c in drop_cols_for_display if c in display_df.columns]).to_string(index=False))
 
     display_df.to_excel(excel_path, index=False)
     print(f"\nExported to {excel_path}")
-    return display_df # Return the display_df with numeric columns for further analysis
+    return display_df  # Return the display_df with numeric columns for further analysis
+
 
 def analyze_portfolio_financials(display_df: pd.DataFrame):
     """
@@ -542,15 +574,19 @@ def analyze_portfolio_financials(display_df: pd.DataFrame):
         cleaned_series = series.dropna()
         if not cleaned_series.empty:
             print(f"{name}:")
-            print(f"  Median: {unit}{cleaned_series.median()/1e9:.2f}B" if unit else f"  Median: {cleaned_series.median():.2f}")
+            print(
+                f"  Median: {unit}{cleaned_series.median()/1e9:.2f}B" if unit else f"  Median: {cleaned_series.median():.2f}")
             print(f"  Range: {unit}{cleaned_series.min()/1e9:.2f}B - {unit}{cleaned_series.max()/1e9:.2f}B" if unit else f"  Range: {cleaned_series.min():.2f} - {cleaned_series.max():.2f}")
         else:
             print(f"No numerical {name.lower()} data available for analysis.")
 
-    print_metric_stats(display_df['total_revenue_numeric'], "Total Revenue", "$")
+    print_metric_stats(
+        display_df['total_revenue_numeric'], "Total Revenue", "$")
     print_metric_stats(display_df['net_income_numeric'], "\nNet Income", "$")
     print_metric_stats(display_df['diluted_eps_numeric'], "\nDiluted EPS")
-    print_metric_stats(display_df['cash_and_equivalents_numeric'], "\nCash & Cash Equivalents", "$")
+    print_metric_stats(
+        display_df['cash_and_equivalents_numeric'], "\nCash & Cash Equivalents", "$")
+
 
 def screen_companies(display_df: pd.DataFrame):
     """
@@ -581,7 +617,8 @@ def screen_companies(display_df: pd.DataFrame):
     # Threshold 3: Missing key metrics (too many N/A)
     key_fields = ['total_revenue', 'net_income', 'diluted_eps']
     # Use the original string columns for N/A check
-    missing_count = display_df[key_fields].apply(lambda r: sum(str(x).strip().lower() in ['n/a', 'na', 'none', ''] for x in r), axis=1)
+    missing_count = display_df[key_fields].apply(lambda r: sum(
+        str(x).strip().lower() in ['n/a', 'na', 'none', ''] for x in r), axis=1)
     missing_flags = display_df[missing_count >= 2].copy()
     if not missing_flags.empty:
         missing_flags['Flag_Reason'] = "Missing 2+ key metrics (Revenue/NI/EPS)"
@@ -589,7 +626,8 @@ def screen_companies(display_df: pd.DataFrame):
                                        missing_flags[['ticker', 'company', 'total_revenue', 'net_income', 'diluted_eps', 'Flag_Reason']]])
 
     if not flagged_companies.empty:
-        flagged_companies = flagged_companies.drop_duplicates(subset=['ticker', 'Flag_Reason']).reset_index(drop=True)
+        flagged_companies = flagged_companies.drop_duplicates(
+            subset=['ticker', 'Flag_Reason']).reset_index(drop=True)
         print("Companies requiring attention:")
         print(flagged_companies.to_string(index=False))
     else:
@@ -603,20 +641,22 @@ def analyze_time_savings(portfolio_size: int, rag_time_seconds: float, total_cos
     print("\nTime Savings Analysis")
     print("=" * 50)
 
-    manual_time_per_proxy_min = 30 # Estimated 30 minutes per proxy for manual review
+    manual_time_per_proxy_min = 30  # Estimated 30 minutes per proxy for manual review
     manual_time_min = portfolio_size * manual_time_per_proxy_min
     manual_time_hours = manual_time_min / 60
 
     rag_time_min = rag_time_seconds / 60
 
     print(f"Manual Review:")
-    print(f"  Estimated Manual Time: {manual_time_min:.1f} min ({manual_time_hours:.1f} hours) for {portfolio_size} companies")
+    print(
+        f"  Estimated Manual Time: {manual_time_min:.1f} min ({manual_time_hours:.1f} hours) for {portfolio_size} companies")
 
     print(f"RAG Extraction:")
     print(f"  RAG Time: {rag_time_min:.1f} min")
 
     savings_min = manual_time_min - rag_time_min
-    savings_percent = (1 - (rag_time_min / manual_time_min)) * 100 if manual_time_min > 0 else 0
+    savings_percent = (1 - (rag_time_min / manual_time_min)
+                       ) * 100 if manual_time_min > 0 else 0
 
     print(f"Savings:")
     print(f"  Absolute Savings: {savings_min:.1f} min")
@@ -634,13 +674,14 @@ def analyze_time_savings(portfolio_size: int, rag_time_seconds: float, total_cos
     plt.ylabel('Time (Minutes)')
     # Adjusted text position to be above the bar.
     for i, time_val in enumerate(times_minutes):
-        plt.text(i, time_val, f'{time_val:.1f} min' + (f'\n(${total_cost:.4f})' if i==1 else ''),
+        plt.text(i, time_val, f'{time_val:.1f} min' + (f'\n(${total_cost:.4f})' if i == 1 else ''),
                  ha='center', va='bottom', fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.show()
 
 # --- Main Pipeline Function ---
+
 
 def run_financial_analysis_pipeline(
     doc_dir: str = 'proxy_filings',
@@ -649,7 +690,7 @@ def run_financial_analysis_pipeline(
     llm_model: str = 'gpt-4o',
     download_files: bool = True,
     portfolio_companies: dict | None = None,
-    openai_api_key: str | None = None # Allows explicit API key pass or env var
+    openai_api_key: str | None = None  # Allows explicit API key pass or env var
 ) -> pd.DataFrame:
     """
     Runs the complete financial analysis pipeline: download, ingest, extract, validate, and report.
@@ -673,16 +714,17 @@ def run_financial_analysis_pipeline(
         os.environ["OPENAI_API_KEY"] = openai_api_key
     elif "OPENAI_API_KEY" not in os.environ:
         print("Error: OPENAI_API_KEY environment variable not set. Please set it or pass it via openai_api_key argument.")
-        return pd.DataFrame() # Return empty DataFrame on failure
+        return pd.DataFrame()  # Return empty DataFrame on failure
 
-    client_llm = OpenAI() # Initialize OpenAI client after ensuring API key is set
+    client_llm = OpenAI()  # Initialize OpenAI client after ensuring API key is set
 
     print("--- Starting Financial Analysis Pipeline ---")
 
     if download_files:
         download_proxy_filings(doc_dir, portfolio_companies)
 
-    collection, embedder = ingest_proxy_statements(doc_dir, portfolio_companies, chunk_size, chunk_overlap)
+    collection, embedder = ingest_proxy_statements(
+        doc_dir, portfolio_companies, chunk_size, chunk_overlap)
 
     if collection is None or embedder is None:
         print("Ingestion failed, cannot proceed with extraction.")
@@ -702,9 +744,11 @@ def run_financial_analysis_pipeline(
         'total_revenue', 'net_income', 'diluted_eps', 'cash_and_equivalents'
     ]
     # Filter ground truth to only include companies in the current portfolio
-    ground_truth_filtered = ground_truth[ground_truth['ticker'].isin(portfolio_companies.keys())].copy()
-    
-    val_df, accuracy = validate_extraction(extracted_df, ground_truth_filtered, fields_to_check)
+    ground_truth_filtered = ground_truth[ground_truth['ticker'].isin(
+        portfolio_companies.keys())].copy()
+
+    val_df, accuracy = validate_extraction(
+        extracted_df, ground_truth_filtered, fields_to_check)
 
     print("\n--- Reporting & Insights ---")
     display_df = display_financial_comparison(extracted_df)
@@ -716,6 +760,7 @@ def run_financial_analysis_pipeline(
 
     print("\n--- Financial Analysis Pipeline Complete ---")
     return extracted_df
+
 
 if __name__ == "__main__":
     # Example usage when run as a script
@@ -736,7 +781,7 @@ if __name__ == "__main__":
         chunk_size=500,
         chunk_overlap=100,
         llm_model='gpt-4o',
-        download_files=True, # Set to False if files are already downloaded
+        download_files=True,  # Set to False if files are already downloaded
         portfolio_companies=my_portfolio,
         # openai_api_key="sk-..." # Uncomment and set if you want to pass it directly
     )
