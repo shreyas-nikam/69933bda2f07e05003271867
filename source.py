@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF for PDF parsing
 import chromadb
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 # Assuming 'langchain-classic' is specifically used as per the original notebook.
 # If a newer 'langchain' is intended, this would be 'from langchain.text_splitter import RecursiveCharacterTextSplitter'
 from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
@@ -160,7 +160,7 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
     for filtered retrieval.
     """
     print("\nInitializing embedding model...")
-    embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    embedder = TextEmbedding('BAAI/bge-small-en-v1.5')
     print("Embedding model loaded.")
 
     splitter = RecursiveCharacterTextSplitter(
@@ -237,12 +237,12 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
         return collection, embedder
 
     print(f"\nEmbedding {len(texts)} chunks...")
-    embeddings = embedder.encode(texts, batch_size=64, show_progress_bar=True)
+    embeddings = [e.tolist() for e in embedder.embed(texts)]
 
     print("Adding chunks to ChromaDB collection...")
     collection.add(
         documents=texts,
-        embeddings=embeddings.tolist(),
+        embeddings=embeddings,
         metadatas=[c['metadata'] for c in all_chunks],
         ids=[c['id'] for c in all_chunks]
     )
@@ -252,9 +252,9 @@ def ingest_proxy_statements(doc_dir: str, portfolio_map: dict, chunk_size: int =
     return collection, embedder
 
 
-def retrieve_for_company(query: str, collection: chromadb.Collection, embedder: SentenceTransformer, ticker: str, k: int = 8):
+def retrieve_for_company(query: str, collection: chromadb.Collection, embedder: TextEmbedding, ticker: str, k: int = 8):
     """Retrieve relevant chunks ONLY from a specific company's documents."""
-    query_embedding = embedder.encode([query]).tolist()
+    query_embedding = [e.tolist() for e in embedder.embed([query])]
 
     results = collection.query(
         query_embeddings=query_embedding,
@@ -274,7 +274,7 @@ def retrieve_for_company(query: str, collection: chromadb.Collection, embedder: 
     return chunks
 
 
-def extract_governance_data(ticker: str, company_name: str, collection: chromadb.Collection, embedder: SentenceTransformer, llm_client: OpenAI, model: str = 'gpt-4o'):
+def extract_governance_data(ticker: str, company_name: str, collection: chromadb.Collection, embedder: TextEmbedding, llm_client: OpenAI, model: str = 'gpt-4o'):
     """Extract structured financial data for one company via RAG."""
 
     queries = [
@@ -342,7 +342,7 @@ def extract_governance_data(ticker: str, company_name: str, collection: chromadb
         return {field: "N/A" for field in required_fields}, 0, 0
 
 
-def run_batch_extraction(portfolio_map: dict, collection: chromadb.Collection, embedder: SentenceTransformer, llm_client: OpenAI, model: str = 'gpt-4o'):
+def run_batch_extraction(portfolio_map: dict, collection: chromadb.Collection, embedder: TextEmbedding, llm_client: OpenAI, model: str = 'gpt-4o'):
     """Orchestrates extraction for all companies in the portfolio."""
     print("\nStarting batch extraction for portfolio companies...")
     results = []
